@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>GitHub Test Analyzer</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        h1 { color: #333; }
+        form { margin-bottom: 30px; }
+        input[type="text"] {
+            width: 400px;
+            padding: 8px;
+            margin-right: 10px;
+        }
+        button {
+            padding: 8px 16px;
+        }
+        .messages {
+            margin-bottom: 20px;
+            color: red;
+        }
+        .results { display: flex; gap: 40px; margin-top: 20px; }
+        .results div { flex: 1; }
+        ul { list-style-type: none; padding-left: 0; }
+        li { background: #f2f2f2; padding: 6px 10px; margin-bottom: 5px; border-radius: 5px; }
+        canvas { max-width: 500px; margin-top: 40px; }
+    </style>
+</head>
+<body>
+<h1>GitHub Test Analyzer</h1>
+
+<!-- Flash and Error Messages -->
+<div class="messages">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+    <ul>
+        {% for category, message in messages %}
+        <li style="color: {{ 'red' if category == 'error' else 'green' }};">{{ message }}</li>
+        {% endfor %}
+    </ul>
+    {% endif %}
+    {% endwith %}
+
+    {% if error_message %}
+    <p>{{ error_message }}</p>
+    {% endif %}
+</div>
+
+<!-- Form -->
+<form method="POST">
+    <input type="text" name="github_url" placeholder="Enter GitHub repo URL" required />
+    <button type="submit">Analyze</button>
+</form>
+
+<!-- Results Section -->
+{% if test_results %}
+<div class="results">
+    <div>
+        <h2>Unit Tests ({{ test_results['unit_tests']|length }})</h2>
+        <ul>
+            {% for test in test_results['unit_tests'] %}
+            <li>{{ test }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+    <div>
+        <h2>Integration Tests ({{ test_results['integration_tests']|length }})</h2>
+        <ul>
+            {% for test in test_results['integration_tests'] %}
+            <li>{{ test }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+    <div>
+        <h2>E2E Tests ({{ test_results['e2e_tests']|length }})</h2>
+        <ul>
+            {% for test in test_results['e2e_tests'] %}
+            <li>{{ test }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+</div>
+
+<!-- Chart Section -->
+<canvas id="testChart"></canvas>
+
+<script>
+    const ctx = document.getElementById('testChart').getContext('2d');
+    const testChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: ['Unit Tests', 'Integration Tests', 'E2E Tests'],
+            datasets: [{
+                label: 'Test Count',
+                data: [
+                    {{ test_results['unit_tests']|length }},
+                    {{ test_results['integration_tests']|length }},
+                    {{ test_results['e2e_tests']|length }}
+                ],
+                backgroundColor: ['#4CAF50', '#2196F3', '#FF9800']
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: { display: false },
+                title: {
+                    display: true,
+                    text: 'Test Type Distribution'
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    precision: 0
+                }
+            }
+        }
+    });
+</script>
+{% endif %}
+</body>
+</html>
