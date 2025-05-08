@@ -20,7 +20,7 @@ def index():
                     error_message = message  # Show error if repo_path is empty
                 else:
                     # Only pass the repo_path to classify_tests_in_repo
-                    test_results = classify_tests_in_repo(repo_path, test_patterns)
+                    test_results = classify_tests_in_repo(repo_path)
             except Exception as e:
                 error_message = f"An error occurred: {str(e)}"
 

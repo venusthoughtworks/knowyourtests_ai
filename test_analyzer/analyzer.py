@@ -41,6 +41,63 @@ test_patterns = {
     ]
 }
 
+def is_test_file(file_path):
+    """
+    Check if a file is a test file by examining its content.
+    """
+    try:
+        with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+            content = f.read()
+            
+        # Check if file contains any test patterns
+        for patterns in test_patterns.values():
+            if any(re.search(pattern, content, re.IGNORECASE) for pattern in patterns):
+                return True
+                
+        return False
+    except:
+        return False
+
+def find_test_files(repo_path):
+    """
+    Find test files by looking for actual test code in files.
+    """
+    test_files = []
+    
+    # Common test file extensions
+    test_extensions = {".py", ".js", ".ts", ".java", ".kt", ".cs", ".rb", ".feature"}
+    
+    # Files to exclude
+    excluded_files = {
+        'package.json', 'package-lock.json', 'yarn.lock',
+        'tsconfig.json', 'jest.config.js', 'pytest.ini',
+        'conftest.py', 'webpack.config.js', 'babel.config.js',
+        'karma.conf.js', 'cypress.json', 'playwright.config.js',
+        'jest.config.ts', 'tsconfig.json', 'Gemfile', 'Gemfile.lock',
+        'go.mod', 'go.sum', 'Cargo.toml', 'Cargo.lock',
+        'composer.json', 'composer.lock', 'nuget.config',
+        '.gitignore', 'README.md', 'requirements.txt',
+        'setup.py', 'pom.xml', 'build.gradle'
+    }
+    
+    for root, _, files in os.walk(repo_path):
+        for file in files:
+            # Skip excluded files
+            if file in excluded_files or file.startswith('.'):
+                continue
+                
+            # Check file extension
+            if not any(file.endswith(ext) for ext in test_extensions):
+                continue
+                
+            file_path = os.path.join(root, file)
+            
+            # Check if file contains test code
+            if is_test_file(file_path):
+                test_files.append(file_path)
+    
+    return test_files
+
 def count_test_cases_in_file(file_path):
     """
     Count test cases in a single file.
@@ -78,21 +135,7 @@ def count_test_cases_in_file(file_path):
         print(f"Error processing file {file_path}: {str(e)}")
         return {"unit": 0, "integration": 0, "e2e": 0}
 
-def find_test_files(repo_path):
-    """
-    Find test files with optimized file extension checking.
-    """
-    test_extensions = {".py", ".js", ".kt", ".java", ".cs", ".rb", ".feature"}
-    test_files = []
-    
-    for root, _, files in os.walk(repo_path):
-        for file in files:
-            if any(file.endswith(ext) for ext in test_extensions):
-                test_files.append(os.path.join(root, file))
-    
-    return test_files
-
-def classify_tests_in_repo(repo_path, test_patterns=None):
+def classify_tests_in_repo(repo_path):
     """
     Classifies tests into unit, integration, and e2e based on file names and patterns in the code.
     Uses parallel processing for better performance.
