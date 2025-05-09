@@ -27,6 +27,26 @@
         ul { list-style-type: none; padding-left: 0; }
         li { background: #f2f2f2; padding: 6px 10px; margin-bottom: 5px; border-radius: 5px; }
         canvas { max-width: 500px; margin-top: 40px; }
+        .test-count {
+            font-size: 1.2em;
+            color: #666;
+            margin-bottom: 10px;
+        }
+        .test-summary {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .test-type {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            padding: 10px;
+            background: white;
+            border-radius: 4px;
+        }
     </style>
 </head>
 <body>
@@ -57,9 +77,27 @@
 
 <!-- Results Section -->
 {% if test_results %}
+<!-- Test Summary Section -->
+<div class="test-summary">
+    <h2>Test Summary</h2>
+    <div class="test-type">
+        <span>Unit Tests:</span>
+        <span>{{ test_results['counts']['unit'] }} test cases in {{ test_results['unit_tests']|length }} files</span>
+    </div>
+    <div class="test-type">
+        <span>Integration Tests:</span>
+        <span>{{ test_results['counts']['integration'] }} test cases in {{ test_results['integration_tests']|length }} files</span>
+    </div>
+    <div class="test-type">
+        <span>E2E Tests:</span>
+        <span>{{ test_results['counts']['e2e'] }} test cases in {{ test_results['e2e_tests']|length }} files</span>
+    </div>
+</div>
+
 <div class="results">
     <div>
-        <h2>Unit Tests ({{ test_results['unit_tests']|length }})</h2>
+        <h2>Unit Tests</h2>
+        <div class="test-count">{{ test_results['counts']['unit'] }} test cases</div>
         <ul>
             {% for test in test_results['unit_tests'] %}
             <li>{{ test }}</li>
@@ -67,7 +105,8 @@
         </ul>
     </div>
     <div>
-        <h2>Integration Tests ({{ test_results['integration_tests']|length }})</h2>
+        <h2>Integration Tests</h2>
+        <div class="test-count">{{ test_results['counts']['integration'] }} test cases</div>
         <ul>
             {% for test in test_results['integration_tests'] %}
             <li>{{ test }}</li>
@@ -75,7 +114,8 @@
         </ul>
     </div>
     <div>
-        <h2>E2E Tests ({{ test_results['e2e_tests']|length }})</h2>
+        <h2>E2E Tests</h2>
+        <div class="test-count">{{ test_results['counts']['e2e'] }} test cases</div>
         <ul>
             {% for test in test_results['e2e_tests'] %}
             <li>{{ test }}</li>
@@ -94,11 +134,11 @@
         data: {
             labels: ['Unit Tests', 'Integration Tests', 'E2E Tests'],
             datasets: [{
-                label: 'Test Count',
+                label: 'Test Cases',
                 data: [
-                    {{ test_results['unit_tests']|length }},
-                    {{ test_results['integration_tests']|length }},
-                    {{ test_results['e2e_tests']|length }}
+                    {{ test_results['counts']['unit'] }},
+                    {{ test_results['counts']['integration'] }},
+                    {{ test_results['counts']['e2e'] }}
                 ],
                 backgroundColor: ['#4CAF50', '#2196F3', '#FF9800']
             }]
@@ -109,7 +149,7 @@
                 legend: { display: false },
                 title: {
                     display: true,
-                    text: 'Test Type Distribution'
+                    text: 'Test Case Distribution'
                 }
             },
             scales: {
