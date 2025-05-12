@@ -1,6 +1,7 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 from .utils import clone_or_update_repo, extract_repo_name
 from test_analyzer.analyzer import classify_tests_in_repo, test_patterns
+from test_analyzer.tech_stack_validator import validate_best_practices
 
 main = Blueprint("main", __name__)
 
@@ -8,6 +9,7 @@ main = Blueprint("main", __name__)
 def index():
     test_results = None
     error_message = None
+    validation_results = None
 
     if request.method == "POST":
         repo_url = request.form.get("github_url")
@@ -21,7 +23,9 @@ def index():
                 else:
                     # Only pass the repo_path to classify_tests_in_repo
                     test_results = classify_tests_in_repo(repo_path)
+                    validation_results = validate_best_practices(repo_path)
             except Exception as e:
                 error_message = f"An error occurred: {str(e)}"
 
-    return render_template("index.html", test_results=test_results, error_message=error_message)
+    return render_template("index.html", validation_results=validation_results,
+                           test_results=test_results, error_message=error_message)
