@@ -1,6 +1,6 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 from .utils import clone_or_update_repo, extract_repo_name
-from test_analyzer.analyzer import classify_tests_in_repo, test_patterns, run_coverage_by_type
+from test_analyzer.analyzer import classify_tests_in_repo, test_patterns, calculate_test_coverage
 from test_analyzer.tech_stack_validator import validate_best_practices
 
 main = Blueprint("main", __name__)
@@ -24,10 +24,11 @@ def index():
                 else:
                     # Only pass the repo_path to classify_tests_in_repo
                     test_results = classify_tests_in_repo(repo_path)
-                    coverage = run_coverage_by_type(repo_path, test_results)
+                    coverage = calculate_test_coverage(test_results)
                     validation_results = validate_best_practices(repo_path)
             except Exception as e:
                 error_message = f"An error occurred: {str(e)}"
 
     return render_template("index.html", validation_results=validation_results,
-                           test_results=test_results, error_message=error_message, coverage=coverage if test_results else None)
+                           test_results=test_results, error_message=error_message, coverage=coverage if test_results else None,
+                           duplicate_tests=test_results.get('duplicate_tests', {}) if test_results else {})

@@ -4,6 +4,7 @@ from concurrent.futures import ThreadPoolExecutor
 from functools import lru_cache
 import subprocess
 import json
+from collections import defaultdict
 
 # Define patterns for unit, integration, and e2e tests across multiple languages
 test_patterns = {
@@ -96,46 +97,141 @@ def find_test_files(repo_path):
             
             # Check if file contains test code
             if is_test_file(file_path):
+                print(f"[TEST DEBUG] Found test file: {file_path}")
                 test_files.append(file_path)
+            else:
+                print(f"[TEST DEBUG] Not a test file: {file_path}")
     
+    print(f"[TEST DEBUG] Total test files found: {len(test_files)}")
     return test_files
 
 def count_test_cases_in_file(file_path):
     """
-    Count test cases in a single file.
+    Count test cases in a single file, classifying as unit, integration, or e2e for Python based on filename, folder, pytest markers, and folder structure.
+    Also extract test function names and their locations for duplicate detection.
     """
     try:
+        print(f"[TEST DEBUG] Processing file: {file_path}")
         with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
             content = f.read()
-            
-        counts = {
-            "unit": 0,
-            "integration": 0,
-            "e2e": 0
-        }
+        counts = {"unit": 0, "integration": 0, "e2e": 0}
+        filename = os.path.basename(file_path).lower()
+        folder = os.path.dirname(file_path).lower()
+        full_path = file_path.lower()
         
-        # Count test cases for each type
-        for test_type, patterns in test_patterns.items():
-            # First check if this is a test file
-            if any(re.search(pattern, content, re.IGNORECASE) for pattern in patterns):
-                # For C# xUnit tests
-                if test_type == "unit" and ("using Xunit" in content or "using xunit" in content):
-                    # Count [Fact] and [Theory] attributes
-                    fact_count = len(re.findall(r'\[Fact\]', content))
-                    theory_count = len(re.findall(r'\[Theory\]', content))
-                    counts[test_type] = fact_count + theory_count
-                else:
-                    # Count test methods
-                    test_methods = len(re.findall(
-                        r'\[Fact\]|\[Theory\]|@Test\s+|test_\w+\s*\(|def\s+test_\w+|\b(it|test)\s*\(',
-                        content
-                    ))
-                    counts[test_type] = test_methods if test_methods > 0 else 1
-                
-        return counts
+        # Extract test function names and their locations
+        test_functions = []
+        for match in re.finditer(r'def\s+(test_\w+)\s*\(', content):
+            test_functions.append({
+                'name': match.group(1),
+                'line': content[:match.start()].count('\n') + 1
+            })
+        print(f"[TEST DEBUG] Found {len(test_functions)} test functions in {file_path}")
+        
+        # Integration test detection
+        is_integration = (
+            'integration' in filename or
+            'integration' in folder or
+            'integration' in full_path or
+            '@pytest.mark.integration' in content
+        )
+        print(f"[TEST DEBUG] Is integration test: {is_integration}")
+        if is_integration:
+            counts["integration"] = len(test_functions)
+        
+        # E2E test detection
+        is_e2e = (
+            'e2e' in filename or
+            'e2e' in folder or
+            'e2e' in full_path or
+            '@pytest.mark.e2e' in content
+        )
+        print(f"[TEST DEBUG] Is E2E test: {is_e2e}")
+        if is_e2e:
+            counts["e2e"] = len(test_functions)
+        
+        # Unit test detection - count all test functions unless they're already counted as integration or e2e
+        if test_functions:
+            counts["unit"] = len(test_functions)
+            # Remove from unit count if already counted as integration or e2e
+            if counts["integration"] > 0:
+                counts["unit"] = 0
+            if counts["e2e"] > 0:
+                counts["unit"] = 0
+            print(f"[TEST DEBUG] Final counts: {counts}")
+        
+        return {
+            'counts': counts,
+            'test_functions': test_functions
+        }
+    except Exception as e:
+        print(f"Error processing file {file_path}: {str(e)}")
+        return {"counts": {"unit": 0, "integration": 0, "e2e": 0}, "test_functions": []}
     except Exception as e:
         print(f"Error processing file {file_path}: {str(e)}")
         return {"unit": 0, "integration": 0, "e2e": 0}
+
+def find_duplicate_tests_across_layers(test_results):
+    """
+    Find duplicate test files (by filename) that appear in more than one test type (unit, integration, e2e).
+    Returns a dict: {filename: [list of types]}
+    """
+    file_to_types = defaultdict(set)
+    for test_type in ['unit', 'integration', 'e2e']:
+        for file_path in test_results.get(f'{test_type}_tests', []):
+            filename = os.path.basename(file_path)
+            file_to_types[filename].add(test_type)
+    # Only keep files that appear in more than one type
+    duplicates = {fname: list(types) for fname, types in file_to_types.items() if len(types) > 1}
+    return duplicates
+
+def find_duplicate_tests_across_layers(test_results):
+    """
+    Find duplicate test functions across different test layers.
+    Returns a dictionary of duplicates for each layer.
+    """
+    duplicates = {
+        "unit": [],
+        "integration": [],
+        "e2e": []
+    }
+    
+    # Track all test functions by name
+    all_functions = {}
+    
+    # First pass: collect all test functions
+    for test_type in ['unit', 'integration', 'e2e']:
+        for test_info in test_results.get(f"{test_type}_tests", []):
+            for func in test_info.get("test_functions", []):
+                func_name = func.get('name')
+                if func_name:
+                    if func_name not in all_functions:
+                        all_functions[func_name] = []
+                    all_functions[func_name].append({
+                        'layer': test_type,
+                        'file': test_info['file_path'],
+                        'line': func.get('line', 0)
+                    })
+    
+    # Second pass: detect duplicates
+    for func_name, locations in all_functions.items():
+        if len(locations) > 1:  # This function appears in multiple layers
+            # Get all unique layers where this function appears
+            layers = set(loc['layer'] for loc in locations)
+            
+            # Create duplicate entries for each layer
+            for loc in locations:
+                # Find other layers where this function appears
+                other_layers = layers - {loc['layer']}
+                if other_layers:
+                    duplicates[loc['layer']].append({
+                        'function': func_name,
+                        'file': loc['file'],
+                        'line': loc['line'],
+                        'other_layers': list(other_layers)
+                    })
+    
+    return duplicates
 
 def classify_tests_in_repo(repo_path):
     """
@@ -159,17 +255,32 @@ def classify_tests_in_repo(repo_path):
         file_results = list(executor.map(count_test_cases_in_file, test_files))
     
     # Aggregate results
-    for file_path, counts in zip(test_files, file_results):
+    for file_path, file_result in zip(test_files, file_results):
+        counts = file_result["counts"]
+        test_functions = file_result["test_functions"]
+        
+        # Add to appropriate test type
         if counts["unit"] > 0:
-            results["unit_tests"].append(file_path)
+            results["unit_tests"].append({
+                "file_path": file_path,
+                "test_functions": test_functions
+            })
             results["counts"]["unit"] += counts["unit"]
         if counts["integration"] > 0:
-            results["integration_tests"].append(file_path)
+            results["integration_tests"].append({
+                "file_path": file_path,
+                "test_functions": test_functions
+            })
             results["counts"]["integration"] += counts["integration"]
         if counts["e2e"] > 0:
-            results["e2e_tests"].append(file_path)
+            results["e2e_tests"].append({
+                "file_path": file_path,
+                "test_functions": test_functions
+            })
             results["counts"]["e2e"] += counts["e2e"]
     
+    # Find duplicates
+    results["duplicate_tests"] = find_duplicate_tests_across_layers(results)
     return results
 
 def find_js_projects(repo_path):
@@ -187,128 +298,66 @@ def find_js_projects(repo_path):
                 print(f"[COVERAGE DEBUG] Error reading {pkg_path}: {e}")
     return js_projects
 
-def run_coverage_by_type(repo_path, test_results):
+def calculate_test_coverage(test_results):
     """
-    Run coverage for the repo and return coverage for unit, integration, and e2e tests.
+    Calculate coverage based on test counts found in each layer.
     Returns a dict:
     {
-        'unit': {'covered_lines': int, 'total_lines': int, 'coverage_percentage': float},
-        'integration': {...},
-        'e2e': {...}
-    }
+        'unit': {
     """
-    import subprocess
-    import os
-    from test_analyzer.tech_stack_validator import detect_tech_stack
-
-    def parse_coverage_py(coverage_file):
-        try:
-            with open(coverage_file, 'r') as f:
-                lines = f.readlines()
-            total, covered = 0, 0
-            for line in lines:
-                if line.strip().startswith('TOTAL'):
-                    parts = line.split()
-                    if len(parts) >= 4:
-                        total = int(parts[1])
-                        covered = int(parts[2])
-            return covered, total
-        except Exception as e:
-            print(f"[COVERAGE DEBUG] Error reading coverage file: {e}")
-            return 0, 0
-
-    def parse_nyc_output(output):
-        for line in output.splitlines():
-            if line.strip().startswith('All files'):
-                parts = line.split('|')
-                if len(parts) >= 2:
-                    try:
-                        percent = float(parts[1].strip())
-                        return percent
-                    except Exception:
-                        pass
-        return 0.0
-
     coverage = {
-        'unit': {'covered_lines': 0, 'total_lines': 0, 'coverage_percentage': 0.0},
-        'integration': {'covered_lines': 0, 'total_lines': 0, 'coverage_percentage': 0.0},
-        'e2e': {'covered_lines': 0, 'total_lines': 0, 'coverage_percentage': 0.0},
+        'unit': {'test_count': 0, 'total_testable_functions': 0, 'coverage_percentage': 0.0, 'files': {}},
+        'integration': {'test_count': 0, 'total_testable_functions': 0, 'coverage_percentage': 0.0, 'files': {}},
+        'e2e': {'test_count': 0, 'total_testable_functions': 0, 'coverage_percentage': 0.0, 'files': {}}
     }
+    
+    # Get all testable functions (functions that start with test_)
+    def get_testable_functions(file_path):
+        try:
+            with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                content = f.read()
+            return len(re.findall(r'def\s+test_\w+', content))
+        except Exception as e:
+            print(f"Error processing file {file_path}: {str(e)}")
+            return 0
 
-    techs = detect_tech_stack(repo_path)
-    print(f"[COVERAGE DEBUG] Detected tech stack: {techs}")
-    if 'Python' in techs:
-        # Run coverage for each test type separately
-        for test_type in ['unit', 'integration', 'e2e']:
-            test_files = test_results.get(f'{test_type}_tests', [])
-            if not test_files:
-                continue
-            # Create a .coveragerc to only include these files
-            coveragerc_path = os.path.join(repo_path, '.coveragerc')
-            with open(coveragerc_path, 'w') as f:
-                f.write('[run]\n')
-                f.write('branch = True\n')
-                f.write('source = .\n')
-                f.write('[report]\n')
-                f.write('omit =\n')
-                # Omit all test files except the current type
-                for other_type in ['unit', 'integration', 'e2e']:
-                    if other_type != test_type:
-                        for file in test_results.get(f'{other_type}_tests', []):
-                            rel_path = os.path.relpath(file, repo_path)
-                            f.write(f'    {rel_path}\n')
-            try:
-                subprocess.run(['coverage', 'erase'], cwd=repo_path, timeout=30)
-                proc_run = subprocess.run(['coverage', 'run', '-m', 'pytest'], cwd=repo_path, capture_output=True, text=True, timeout=120)
-                print(f"[COVERAGE DEBUG] {test_type} coverage run stdout:\n{proc_run.stdout}")
-                print(f"[COVERAGE DEBUG] {test_type} coverage run stderr:\n{proc_run.stderr}")
-                proc_report = subprocess.run(['coverage', 'report', '-m'], cwd=repo_path, capture_output=True, text=True, timeout=30)
-                print(f"[COVERAGE DEBUG] {test_type} coverage report stdout:\n{proc_report.stdout}")
-                print(f"[COVERAGE DEBUG] {test_type} coverage report stderr:\n{proc_report.stderr}")
-                cov_file = os.path.join(repo_path, f'coverage_{test_type}.txt')
-                with open(cov_file, 'w') as f:
-                    f.write(proc_report.stdout)
-                covered, total = parse_coverage_py(cov_file)
-                percent = (covered / total * 100) if total else 0.0
-                coverage[test_type] = {'covered_lines': covered, 'total_lines': total, 'coverage_percentage': percent}
-            except Exception as e:
-                print(f"[COVERAGE DEBUG] Exception during {test_type} coverage: {e}")
-            finally:
-                # Clean up .coveragerc
-                if os.path.exists(coveragerc_path):
-                    os.remove(coveragerc_path)
-    elif 'JavaScript' in techs:
-        # Find all JS projects (monorepo support)
-        js_projects = find_js_projects(repo_path)
-        print(f"[COVERAGE DEBUG] Found JS projects: {js_projects}")
-        total_percent = {'unit': 0.0, 'integration': 0.0, 'e2e': 0.0}
-        total_counts = {'unit': 0, 'integration': 0, 'e2e': 0}
-        for project in js_projects:
-            try:
-                # 1. Run npm install if node_modules is missing
-                if not os.path.exists(os.path.join(project, 'node_modules')):
-                    print(f"[COVERAGE DEBUG] Running npm install in {project}")
-                    subprocess.run(['npm', 'install'], cwd=project, timeout=180)
-                # 2. Run tests with coverage
-                proc = subprocess.run(['npx', 'nyc', '--reporter=text-summary', 'npm', 'test'], cwd=project, capture_output=True, text=True, timeout=180)
-                print(f"[COVERAGE DEBUG] JS project {project} nyc stdout:\n{proc.stdout}")
-                print(f"[COVERAGE DEBUG] JS project {project} nyc stderr:\n{proc.stderr}")
-                percent = parse_nyc_output(proc.stdout)
-                # 3. Count test files for each type in this project
-                for test_type in ['unit', 'integration', 'e2e']:
-                    files = [f for f in test_results.get(f'{test_type}_tests', []) if f.startswith(project)]
-                    count = len(files)
-                    total_counts[test_type] += count
-                    # Distribute coverage by file count proportion
-                    total_files = sum([len([f for f in test_results.get(f'{t}_tests', []) if f.startswith(project)]) for t in ['unit', 'integration', 'e2e']])
-                    prop = (count / total_files) if total_files else 0
-                    total_percent[test_type] += percent * prop
-            except Exception as e:
-                print(f"[COVERAGE DEBUG] Exception during JS coverage in {project}: {e}")
-        for test_type in ['unit', 'integration', 'e2e']:
-            coverage[test_type]['coverage_percentage'] = total_percent[test_type]
-            coverage[test_type]['covered_lines'] = 0  # Not available from nyc summary
-            coverage[test_type]['total_lines'] = 0
-    print(f"[COVERAGE DEBUG] Final coverage dict: {coverage}")
+    # For each test type
+    for test_type in ['unit', 'integration', 'e2e']:
+        test_files = test_results.get(f'{test_type}_tests', [])
+        if not test_files:
+            continue
+
+        # Process each file
+        for file_info in test_files:
+            file_path = file_info['file_path']
+            test_count = len(file_info['test_functions'])
+            total_functions = get_testable_functions(file_path)
+            
+            # Store file-level stats
+            coverage[test_type]['files'][file_path] = {
+                'test_count': test_count,
+                'total_functions': total_functions,
+                'coverage_percentage': (test_count / total_functions * 100) if total_functions > 0 else 0.0
+            }
+            
+            # Update overall stats
+            coverage[test_type]['test_count'] += test_count
+            coverage[test_type]['total_testable_functions'] += total_functions
+
+    # Calculate overall coverage percentage
+    for test_type in ['unit', 'integration', 'e2e']:
+        if coverage[test_type]['total_testable_functions'] > 0:
+            # Calculate raw percentage
+            raw_percentage = (coverage[test_type]['test_count'] /
+                            coverage[test_type]['total_testable_functions'] * 100)
+            
+            # Cap at 100% if test_count exceeds total_testable_functions
+            coverage[test_type]['coverage_percentage'] = min(100, raw_percentage)
+            
+            # Add a warning if test_count exceeds total_testable_functions
+            if coverage[test_type]['test_count'] > coverage[test_type]['total_testable_functions']:
+                print(f"[COVERAGE WARNING] {test_type} test count ({coverage[test_type]['test_count']}) exceeds total testable functions ({coverage[test_type]['total_testable_functions']})")
+        else:
+            coverage[test_type]['coverage_percentage'] = 0.0
+
     return coverage
-
