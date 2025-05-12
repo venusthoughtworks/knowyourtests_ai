@@ -167,6 +167,53 @@
         <span>E2E Tests:</span>
         <span>{{ test_results['counts']['e2e'] }} test cases in {{ test_results['e2e_tests']|length }} files</span>
     </div>
+    <div class="test-type" style="margin-top: 20px;">
+        <span>Duplicate Tests:</span>
+        <div style="margin-top: 10px;">
+            <div style="margin-bottom: 10px;">
+                <strong>Unit Tests:</strong>
+                {% if duplicate_tests.unit %}
+                    <ul style="margin: 10px 0; padding-left: 20px;">
+                        {% for test in duplicate_tests.unit %}
+                            <li style="background: #fff; padding: 5px; border-radius: 3px; margin: 5px 0;">
+                                <span style="color: #dc3545;">{{ test.function }}</span> (Also in: {{ test.other_layers|join(', ') }})
+                            </li>
+                        {% endfor %}
+                    </ul>
+                {% else %}
+                    <span style="color: #28a745;">0 duplicate test cases found</span>
+                {% endif %}
+            </div>
+            <div style="margin-bottom: 10px;">
+                <strong>Integration Tests:</strong>
+                {% if duplicate_tests.integration %}
+                    <ul style="margin: 10px 0; padding-left: 20px;">
+                        {% for test in duplicate_tests.integration %}
+                            <li style="background: #fff; padding: 5px; border-radius: 3px; margin: 5px 0;">
+                                <span style="color: #dc3545;">{{ test.function }}</span> (Also in: {{ test.other_layers|join(', ') }})
+                            </li>
+                        {% endfor %}
+                    </ul>
+                {% else %}
+                    <span style="color: #28a745;">0 duplicate test cases found</span>
+                {% endif %}
+            </div>
+            <div>
+                <strong>E2E Tests:</strong>
+                {% if duplicate_tests.e2e %}
+                    <ul style="margin: 10px 0; padding-left: 20px;">
+                        {% for test in duplicate_tests.e2e %}
+                            <li style="background: #fff; padding: 5px; border-radius: 3px; margin: 5px 0;">
+                                <span style="color: #dc3545;">{{ test.function }}</span> (Also in: {{ test.other_layers|join(', ') }})
+                            </li>
+                        {% endfor %}
+                    </ul>
+                {% else %}
+                    <span style="color: #28a745;">0 duplicate test cases found</span>
+                {% endif %}
+            </div>
+        </div>
+    </div>
 </div>
 
 <!-- Coverage Section -->
@@ -180,7 +227,7 @@
                 {{ '%.1f'|format(coverage['unit']['coverage_percentage']|default(0)) }}%
             </div>
         </div>
-        <small>{{ coverage['unit']['covered_lines']|default(0) }}/{{ coverage['unit']['total_lines']|default(0) }} lines covered</small>
+        <small>{{ coverage['unit']['test_count']|default(0) }}/{{ coverage['unit']['total_testable_functions']|default(0) }} testable functions covered</small>
     </div>
     <div style="margin-bottom: 18px;">
         <strong>Integration Test Coverage:</strong>
@@ -189,7 +236,7 @@
                 {{ '%.1f'|format(coverage['integration']['coverage_percentage']|default(0)) }}%
             </div>
         </div>
-        <small>{{ coverage['integration']['covered_lines']|default(0) }}/{{ coverage['integration']['total_lines']|default(0) }} lines covered</small>
+        <small>{{ coverage['integration']['test_count']|default(0) }}/{{ coverage['integration']['total_testable_functions']|default(0) }} testable functions covered</small>
     </div>
     <div style="margin-bottom: 10px;">
         <strong>E2E Test Coverage:</strong>
@@ -198,11 +245,27 @@
                 {{ '%.1f'|format(coverage['e2e']['coverage_percentage']|default(0)) }}%
             </div>
         </div>
-        <small>{{ coverage['e2e']['covered_lines']|default(0) }}/{{ coverage['e2e']['total_lines']|default(0) }} lines covered</small>
+        <small>{{ coverage['e2e']['test_count']|default(0) }}/{{ coverage['e2e']['total_testable_functions']|default(0) }} testable functions covered</small>
     </div>
 </div>
 {% endif %}
 <!-- End Coverage Section -->
+
+<!-- Duplicate Tests Section -->
+{% if test_results and test_results['duplicate_tests'] %}
+<div class="test-summary" style="margin-top: 20px;">
+    <h2>Duplicate Tests Across Layers</h2>
+    <ul style="list-style-type: none; padding-left: 0;">
+        {% for filename, layers in test_results['duplicate_tests'].items() %}
+        <li style="margin-bottom: 10px; background: #fff3cd; border: 1px solid #ffeeba; border-radius: 6px; padding: 10px;">
+            <strong>{{ filename }}</strong> appears in:
+            <span style="color: #0288d1; font-weight: bold;">{{ layers|join(', ')|capitalize }}</span>
+        </li>
+        {% endfor %}
+    </ul>
+</div>
+{% endif %}
+<!-- End Duplicate Tests Section -->
 
 <!-- Collapsible Sections for Results -->
     <div class="results">
