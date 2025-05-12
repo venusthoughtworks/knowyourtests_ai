@@ -1,169 +1,166 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Test Analyzer</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <title>GitHub Test Analyzer</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        .test-section {
-            margin-bottom: 2rem;
-            padding: 1.5rem;
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        h1 { color: #333; }
+        form { margin-bottom: 30px; }
+        input[type="text"] {
+            width: 400px;
+            padding: 8px;
+            margin-right: 10px;
+        }
+        button {
+            padding: 8px 16px;
+        }
+        .messages {
+            margin-bottom: 20px;
+            color: red;
+        }
+        .results { display: flex; gap: 40px; margin-top: 20px; }
+        .results div { flex: 1; }
+        ul { list-style-type: none; padding-left: 0; }
+        li { background: #f2f2f2; padding: 6px 10px; margin-bottom: 5px; border-radius: 5px; }
+        canvas { max-width: 500px; margin-top: 40px; }
+        .test-count {
+            font-size: 1.2em;
+            color: #666;
+            margin-bottom: 10px;
+        }
+        .test-summary {
+            background: #f8f9fa;
+            padding: 20px;
             border-radius: 8px;
+            margin-bottom: 30px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
-        .unit-tests { background-color: #e3f2fd; }
-        .integration-tests { background-color: #f3e5f5; }
-        .e2e-tests { background-color: #e8f5e9; }
-        .coverage-bar {
-            height: 20px;
-            background-color: #e9ecef;
+        .test-type {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            padding: 10px;
+            background: white;
             border-radius: 4px;
-            margin: 10px 0;
-        }
-        .coverage-fill {
-            height: 100%;
-            border-radius: 4px;
-            transition: width 0.3s ease;
-        }
-        .coverage-high { background-color: #28a745; }
-        .coverage-medium { background-color: #ffc107; }
-        .coverage-low { background-color: #dc3545; }
-        .test-file {
-            padding: 0.5rem;
-            margin: 0.25rem 0;
-            background-color: rgba(255,255,255,0.7);
-            border-radius: 4px;
-        }
-        .view-tests-btn {
-            width: 100%;
-            margin-top: 1rem;
-        }
-        .test-files-container {
-            margin-top: 1rem;
-            max-height: 300px;
-            overflow-y: auto;
         }
     </style>
 </head>
 <body>
-    <div class="container mt-5">
-        <h1 class="mb-4">Test Analyzer</h1>
-        
-        <form method="POST" class="mb-4">
-            <div class="input-group">
-                <input type="text" name="github_url" class="form-control" placeholder="Enter GitHub repository URL" required>
-                <button type="submit" class="btn btn-primary">Analyze Tests</button>
-            </div>
-        </form>
+<h1>GitHub Test Analyzer</h1>
 
-        {% if error_message %}
-        <div class="alert alert-danger">
-            {{ error_message }}
-        </div>
-        {% endif %}
+<!-- Flash and Error Messages -->
+<div class="messages">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+    <ul>
+        {% for category, message in messages %}
+        <li style="color: {{ 'red' if category == 'error' else 'green' }};">{{ message }}</li>
+        {% endfor %}
+    </ul>
+    {% endif %}
+    {% endwith %}
 
-        {% if test_results %}
-        <div class="row">
-            <!-- Unit Tests Section -->
-            <div class="col-md-4">
-                <div class="test-section unit-tests">
-                    <h3>Unit Tests</h3>
-                    <div class="mb-3">
-                        <strong>Count:</strong> {{ test_results.counts.unit }}
-                    </div>
-                    <div class="mb-3">
-                        <strong>Coverage:</strong>
-                        <div class="coverage-bar">
-                            <div class="coverage-fill {% if test_results.coverage.unit.coverage_percentage >= 80 %}coverage-high{% elif test_results.coverage.unit.coverage_percentage >= 50 %}coverage-medium{% else %}coverage-low{% endif %}" 
-                                 style="width: {{ test_results.coverage.unit.coverage_percentage }}%">
-                            </div>
-                        </div>
-                        <small>
-                            {{ test_results.coverage.unit.covered_lines }}/{{ test_results.coverage.unit.total_lines }} lines 
-                            ({{ "%.1f"|format(test_results.coverage.unit.coverage_percentage) }}%)
-                        </small>
-                    </div>
-                    <button class="btn btn-outline-primary view-tests-btn" type="button" data-bs-toggle="collapse" data-bs-target="#unitTestsList" aria-expanded="false">
-                        View Tests ({{ test_results.unit_tests|length }})
-                    </button>
-                    <div class="collapse test-files-container" id="unitTestsList">
-                        <div class="test-files mt-3">
-                            {% for file in test_results.unit_tests %}
-                            <div class="test-file">{{ file }}</div>
-                            {% endfor %}
-                        </div>
-                    </div>
-                </div>
-            </div>
+    {% if error_message %}
+    <p>{{ error_message }}</p>
+    {% endif %}
+</div>
 
-            <!-- Integration Tests Section -->
-            <div class="col-md-4">
-                <div class="test-section integration-tests">
-                    <h3>Integration Tests</h3>
-                    <div class="mb-3">
-                        <strong>Count:</strong> {{ test_results.counts.integration }}
-                    </div>
-                    <div class="mb-3">
-                        <strong>Coverage:</strong>
-                        <div class="coverage-bar">
-                            <div class="coverage-fill {% if test_results.coverage.integration.coverage_percentage >= 80 %}coverage-high{% elif test_results.coverage.integration.coverage_percentage >= 50 %}coverage-medium{% else %}coverage-low{% endif %}" 
-                                 style="width: {{ test_results.coverage.integration.coverage_percentage }}%">
-                            </div>
-                        </div>
-                        <small>
-                            {{ test_results.coverage.integration.covered_lines }}/{{ test_results.coverage.integration.total_lines }} lines 
-                            ({{ "%.1f"|format(test_results.coverage.integration.coverage_percentage) }}%)
-                        </small>
-                    </div>
-                    <button class="btn btn-outline-primary view-tests-btn" type="button" data-bs-toggle="collapse" data-bs-target="#integrationTestsList" aria-expanded="false">
-                        View Tests ({{ test_results.integration_tests|length }})
-                    </button>
-                    <div class="collapse test-files-container" id="integrationTestsList">
-                        <div class="test-files mt-3">
-                            {% for file in test_results.integration_tests %}
-                            <div class="test-file">{{ file }}</div>
-                            {% endfor %}
-                        </div>
-                    </div>
-                </div>
-            </div>
+<!-- Form -->
+<form method="POST">
+    <input type="text" name="github_url" placeholder="Enter GitHub repo URL" required />
+    <button type="submit">Analyze</button>
+</form>
 
-            <!-- E2E Tests Section -->
-            <div class="col-md-4">
-                <div class="test-section e2e-tests">
-                    <h3>E2E Tests</h3>
-                    <div class="mb-3">
-                        <strong>Count:</strong> {{ test_results.counts.e2e }}
-                    </div>
-                    <div class="mb-3">
-                        <strong>Coverage:</strong>
-                        <div class="coverage-bar">
-                            <div class="coverage-fill {% if test_results.coverage.e2e.coverage_percentage >= 80 %}coverage-high{% elif test_results.coverage.e2e.coverage_percentage >= 50 %}coverage-medium{% else %}coverage-low{% endif %}" 
-                                 style="width: {{ test_results.coverage.e2e.coverage_percentage }}%">
-                            </div>
-                        </div>
-                        <small>
-                            {{ test_results.coverage.e2e.covered_lines }}/{{ test_results.coverage.e2e.total_lines }} lines 
-                            ({{ "%.1f"|format(test_results.coverage.e2e.coverage_percentage) }}%)
-                        </small>
-                    </div>
-                    <button class="btn btn-outline-primary view-tests-btn" type="button" data-bs-toggle="collapse" data-bs-target="#e2eTestsList" aria-expanded="false">
-                        View Tests ({{ test_results.e2e_tests|length }})
-                    </button>
-                    <div class="collapse test-files-container" id="e2eTestsList">
-                        <div class="test-files mt-3">
-                            {% for file in test_results.e2e_tests %}
-                            <div class="test-file">{{ file }}</div>
-                            {% endfor %}
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        {% endif %}
+<!-- Results Section -->
+{% if test_results %}
+<!-- Test Summary Section -->
+<div class="test-summary">
+    <h2>Test Summary</h2>
+    <div class="test-type">
+        <span>Unit Tests:</span>
+        <span>{{ test_results['counts']['unit'] }} test cases in {{ test_results['unit_tests']|length }} files</span>
     </div>
+    <div class="test-type">
+        <span>Integration Tests:</span>
+        <span>{{ test_results['counts']['integration'] }} test cases in {{ test_results['integration_tests']|length }} files</span>
+    </div>
+    <div class="test-type">
+        <span>E2E Tests:</span>
+        <span>{{ test_results['counts']['e2e'] }} test cases in {{ test_results['e2e_tests']|length }} files</span>
+    </div>
+</div>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+<div class="results">
+    <div>
+        <h2>Unit Tests</h2>
+        <div class="test-count">{{ test_results['counts']['unit'] }} test cases</div>
+        <ul>
+            {% for test in test_results['unit_tests'] %}
+            <li>{{ test }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+    <div>
+        <h2>Integration Tests</h2>
+        <div class="test-count">{{ test_results['counts']['integration'] }} test cases</div>
+        <ul>
+            {% for test in test_results['integration_tests'] %}
+            <li>{{ test }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+    <div>
+        <h2>E2E Tests</h2>
+        <div class="test-count">{{ test_results['counts']['e2e'] }} test cases</div>
+        <ul>
+            {% for test in test_results['e2e_tests'] %}
+            <li>{{ test }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+</div>
+
+<!-- Chart Section -->
+<canvas id="testChart"></canvas>
+
+<script>
+    const ctx = document.getElementById('testChart').getContext('2d');
+    const testChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: ['Unit Tests', 'Integration Tests', 'E2E Tests'],
+            datasets: [{
+                label: 'Test Cases',
+                data: [
+                    {{ test_results['counts']['unit'] }},
+                    {{ test_results['counts']['integration'] }},
+                    {{ test_results['counts']['e2e'] }}
+                ],
+                backgroundColor: ['#4CAF50', '#2196F3', '#FF9800']
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: { display: false },
+                title: {
+                    display: true,
+                    text: 'Test Case Distribution'
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    precision: 0
+                }
+            }
+        }
+    });
+</script>
+{% endif %}
 </body>
 </html>
