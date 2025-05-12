@@ -2,6 +2,8 @@ import os
 import re
 from concurrent.futures import ThreadPoolExecutor
 from functools import lru_cache
+import subprocess
+import json
 
 # Define patterns for unit, integration, and e2e tests across multiple languages
 test_patterns = {
@@ -169,4 +171,144 @@ def classify_tests_in_repo(repo_path):
             results["counts"]["e2e"] += counts["e2e"]
     
     return results
+
+def find_js_projects(repo_path):
+    """Recursively find all JS projects (folders with package.json and a test script)."""
+    js_projects = []
+    for root, dirs, files in os.walk(repo_path):
+        if 'package.json' in files:
+            pkg_path = os.path.join(root, 'package.json')
+            try:
+                with open(pkg_path, 'r') as f:
+                    pkg = json.load(f)
+                if 'scripts' in pkg and 'test' in pkg['scripts']:
+                    js_projects.append(root)
+            except Exception as e:
+                print(f"[COVERAGE DEBUG] Error reading {pkg_path}: {e}")
+    return js_projects
+
+def run_coverage_by_type(repo_path, test_results):
+    """
+    Run coverage for the repo and return coverage for unit, integration, and e2e tests.
+    Returns a dict:
+    {
+        'unit': {'covered_lines': int, 'total_lines': int, 'coverage_percentage': float},
+        'integration': {...},
+        'e2e': {...}
+    }
+    """
+    import subprocess
+    import os
+    from test_analyzer.tech_stack_validator import detect_tech_stack
+
+    def parse_coverage_py(coverage_file):
+        try:
+            with open(coverage_file, 'r') as f:
+                lines = f.readlines()
+            total, covered = 0, 0
+            for line in lines:
+                if line.strip().startswith('TOTAL'):
+                    parts = line.split()
+                    if len(parts) >= 4:
+                        total = int(parts[1])
+                        covered = int(parts[2])
+            return covered, total
+        except Exception as e:
+            print(f"[COVERAGE DEBUG] Error reading coverage file: {e}")
+            return 0, 0
+
+    def parse_nyc_output(output):
+        for line in output.splitlines():
+            if line.strip().startswith('All files'):
+                parts = line.split('|')
+                if len(parts) >= 2:
+                    try:
+                        percent = float(parts[1].strip())
+                        return percent
+                    except Exception:
+                        pass
+        return 0.0
+
+    coverage = {
+        'unit': {'covered_lines': 0, 'total_lines': 0, 'coverage_percentage': 0.0},
+        'integration': {'covered_lines': 0, 'total_lines': 0, 'coverage_percentage': 0.0},
+        'e2e': {'covered_lines': 0, 'total_lines': 0, 'coverage_percentage': 0.0},
+    }
+
+    techs = detect_tech_stack(repo_path)
+    print(f"[COVERAGE DEBUG] Detected tech stack: {techs}")
+    if 'Python' in techs:
+        # Run coverage for each test type separately
+        for test_type in ['unit', 'integration', 'e2e']:
+            test_files = test_results.get(f'{test_type}_tests', [])
+            if not test_files:
+                continue
+            # Create a .coveragerc to only include these files
+            coveragerc_path = os.path.join(repo_path, '.coveragerc')
+            with open(coveragerc_path, 'w') as f:
+                f.write('[run]\n')
+                f.write('branch = True\n')
+                f.write('source = .\n')
+                f.write('[report]\n')
+                f.write('omit =\n')
+                # Omit all test files except the current type
+                for other_type in ['unit', 'integration', 'e2e']:
+                    if other_type != test_type:
+                        for file in test_results.get(f'{other_type}_tests', []):
+                            rel_path = os.path.relpath(file, repo_path)
+                            f.write(f'    {rel_path}\n')
+            try:
+                subprocess.run(['coverage', 'erase'], cwd=repo_path, timeout=30)
+                proc_run = subprocess.run(['coverage', 'run', '-m', 'pytest'], cwd=repo_path, capture_output=True, text=True, timeout=120)
+                print(f"[COVERAGE DEBUG] {test_type} coverage run stdout:\n{proc_run.stdout}")
+                print(f"[COVERAGE DEBUG] {test_type} coverage run stderr:\n{proc_run.stderr}")
+                proc_report = subprocess.run(['coverage', 'report', '-m'], cwd=repo_path, capture_output=True, text=True, timeout=30)
+                print(f"[COVERAGE DEBUG] {test_type} coverage report stdout:\n{proc_report.stdout}")
+                print(f"[COVERAGE DEBUG] {test_type} coverage report stderr:\n{proc_report.stderr}")
+                cov_file = os.path.join(repo_path, f'coverage_{test_type}.txt')
+                with open(cov_file, 'w') as f:
+                    f.write(proc_report.stdout)
+                covered, total = parse_coverage_py(cov_file)
+                percent = (covered / total * 100) if total else 0.0
+                coverage[test_type] = {'covered_lines': covered, 'total_lines': total, 'coverage_percentage': percent}
+            except Exception as e:
+                print(f"[COVERAGE DEBUG] Exception during {test_type} coverage: {e}")
+            finally:
+                # Clean up .coveragerc
+                if os.path.exists(coveragerc_path):
+                    os.remove(coveragerc_path)
+    elif 'JavaScript' in techs:
+        # Find all JS projects (monorepo support)
+        js_projects = find_js_projects(repo_path)
+        print(f"[COVERAGE DEBUG] Found JS projects: {js_projects}")
+        total_percent = {'unit': 0.0, 'integration': 0.0, 'e2e': 0.0}
+        total_counts = {'unit': 0, 'integration': 0, 'e2e': 0}
+        for project in js_projects:
+            try:
+                # 1. Run npm install if node_modules is missing
+                if not os.path.exists(os.path.join(project, 'node_modules')):
+                    print(f"[COVERAGE DEBUG] Running npm install in {project}")
+                    subprocess.run(['npm', 'install'], cwd=project, timeout=180)
+                # 2. Run tests with coverage
+                proc = subprocess.run(['npx', 'nyc', '--reporter=text-summary', 'npm', 'test'], cwd=project, capture_output=True, text=True, timeout=180)
+                print(f"[COVERAGE DEBUG] JS project {project} nyc stdout:\n{proc.stdout}")
+                print(f"[COVERAGE DEBUG] JS project {project} nyc stderr:\n{proc.stderr}")
+                percent = parse_nyc_output(proc.stdout)
+                # 3. Count test files for each type in this project
+                for test_type in ['unit', 'integration', 'e2e']:
+                    files = [f for f in test_results.get(f'{test_type}_tests', []) if f.startswith(project)]
+                    count = len(files)
+                    total_counts[test_type] += count
+                    # Distribute coverage by file count proportion
+                    total_files = sum([len([f for f in test_results.get(f'{t}_tests', []) if f.startswith(project)]) for t in ['unit', 'integration', 'e2e']])
+                    prop = (count / total_files) if total_files else 0
+                    total_percent[test_type] += percent * prop
+            except Exception as e:
+                print(f"[COVERAGE DEBUG] Exception during JS coverage in {project}: {e}")
+        for test_type in ['unit', 'integration', 'e2e']:
+            coverage[test_type]['coverage_percentage'] = total_percent[test_type]
+            coverage[test_type]['covered_lines'] = 0  # Not available from nyc summary
+            coverage[test_type]['total_lines'] = 0
+    print(f"[COVERAGE DEBUG] Final coverage dict: {coverage}")
+    return coverage
 
