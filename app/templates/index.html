@@ -169,6 +169,41 @@
     </div>
 </div>
 
+<!-- Coverage Section -->
+{% if coverage %}
+<div class="test-summary" style="margin-top: 20px;">
+    <h2>Test Coverage</h2>
+    <div style="margin-bottom: 18px;">
+        <strong>Unit Test Coverage:</strong>
+        <div style="background: #e0e0e0; border-radius: 8px; height: 22px; width: 100%; margin-bottom: 4px;">
+            <div style="background: #4CAF50; width: {{ coverage['unit']['coverage_percentage']|default(0)|float }}%; height: 100%; border-radius: 8px; text-align: right; color: #fff; padding-right: 10px; font-weight: bold; line-height: 22px;">
+                {{ '%.1f'|format(coverage['unit']['coverage_percentage']|default(0)) }}%
+            </div>
+        </div>
+        <small>{{ coverage['unit']['covered_lines']|default(0) }}/{{ coverage['unit']['total_lines']|default(0) }} lines covered</small>
+    </div>
+    <div style="margin-bottom: 18px;">
+        <strong>Integration Test Coverage:</strong>
+        <div style="background: #e0e0e0; border-radius: 8px; height: 22px; width: 100%; margin-bottom: 4px;">
+            <div style="background: #2196F3; width: {{ coverage['integration']['coverage_percentage']|default(0)|float }}%; height: 100%; border-radius: 8px; text-align: right; color: #fff; padding-right: 10px; font-weight: bold; line-height: 22px;">
+                {{ '%.1f'|format(coverage['integration']['coverage_percentage']|default(0)) }}%
+            </div>
+        </div>
+        <small>{{ coverage['integration']['covered_lines']|default(0) }}/{{ coverage['integration']['total_lines']|default(0) }} lines covered</small>
+    </div>
+    <div style="margin-bottom: 10px;">
+        <strong>E2E Test Coverage:</strong>
+        <div style="background: #e0e0e0; border-radius: 8px; height: 22px; width: 100%; margin-bottom: 4px;">
+            <div style="background: #FF9800; width: {{ coverage['e2e']['coverage_percentage']|default(0)|float }}%; height: 100%; border-radius: 8px; text-align: right; color: #fff; padding-right: 10px; font-weight: bold; line-height: 22px;">
+                {{ '%.1f'|format(coverage['e2e']['coverage_percentage']|default(0)) }}%
+            </div>
+        </div>
+        <small>{{ coverage['e2e']['covered_lines']|default(0) }}/{{ coverage['e2e']['total_lines']|default(0) }} lines covered</small>
+    </div>
+</div>
+{% endif %}
+<!-- End Coverage Section -->
+
 <!-- Collapsible Sections for Results -->
     <div class="results">
         <!-- Unit Tests -->
