@@ -4,70 +4,145 @@
     <title>GitHub Test Analyzer</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
+        /* General Styles */
         body {
-            font-family: Arial, sans-serif;
-            margin: 20px;
-        }
-        h1 { color: #333; }
-        form { margin-bottom: 30px; }
-        input[type="text"] {
-            width: 400px;
-            padding: 8px;
-            margin-right: 10px;
-        }
-        button {
-            padding: 8px 16px;
-        }
-        .messages {
-            margin-bottom: 20px;
-            color: red;
-        }
-        .results { display: flex; gap: 40px; margin-top: 20px; }
-        .results div { flex: 1; }
-        ul { list-style-type: none; padding-left: 0; }
-        li { background: #f2f2f2; padding: 6px 10px; margin-bottom: 5px; border-radius: 5px; }
-        canvas { max-width: 500px; margin-top: 40px; }
-        .test-count {
-            font-size: 1.2em;
-            color: #666;
-            margin-bottom: 10px;
-        }
-        .test-summary {
-            background: #f8f9fa;
+            font-family: 'Arial', sans-serif;
+            color: #444;
+            margin: 20px auto;
+            max-width: 900px;
+            line-height: 1.6;
+            background: radial-gradient(circle, #e3f2fd, #90caf9);
             padding: 20px;
             border-radius: 8px;
-            margin-bottom: 30px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            box-shadow: 0px 4px 15px rgba(0, 0, 0, 0.2);
         }
-        .test-type {
+
+        h1 {
+            font-size: 2.5em;
+            text-align: center;
+            color: #333;
+            margin-bottom: 20px;
+            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.2);
+        }
+
+        h2 {
+            font-size: 1.8em;
+            color: #333;
+            border-bottom: 2px solid #f0f0f0;
+            padding-bottom: 5px;
+            margin-bottom: 20px;
+            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.1);
+        }
+
+        form {
+            margin-bottom: 30px;
             display: flex;
-            justify-content: space-between;
-            margin-bottom: 10px;
+            justify-content: center;
+        }
+
+        input[type="text"] {
+            width: 400px;
             padding: 10px;
-            background: white;
-            border-radius: 4px;
+            font-size: 1em;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            margin-right: 10px;
+        }
+
+        button {
+            padding: 10px 20px;
+            font-size: 1em;
+            color: #fff;
+            background: #0288d1;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            box-shadow: 0 3px 6px rgba(0, 0, 0, 0.2);
+        }
+
+        button:hover {
+            background: #0277bd;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+        }
+
+        /* Flash Messages */
+        .messages {
+            margin-bottom: 20px;
+            padding: 10px;
+            border-radius: 5px;
+            background-color: #f8d7da;
+            color: #721c24;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+        }
+
+        .messages ul {
+            margin: 0;
+            padding: 0;
+            list-style-type: none;
+        }
+
+        /* Collapsibles and Results */
+        .collapsible {
+            display: block;
+            width: 100%;
+            background-color: #0288d1;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            padding: 12px;
+            margin: 10px 0;
+            text-align: left;
+            cursor: pointer;
+            font-size: 1.1em;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+        }
+
+        .collapsible:hover {
+            background-color: #0277bd;
+        }
+
+        .content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.4s ease-out;
+            background: #e3f2fd;
+            border-left: 6px solid #0288d1;
+            padding: 0 15px;
+            border-radius: 5px;
+        }
+
+        .content ul {
+            margin: 10px 0;
+            list-style-type: none;
+            padding-left: 20px;
+        }
+
+        .content ul li {
+            padding: 10px;
+            margin-bottom: 5px;
+            background-color: #fff;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            transition: transform 0.2s;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+
+        .content ul li:hover {
+            transform: translateX(5px);
+        }
+
+        .test-summary {
+            margin-top: 30px;
+            padding: 20px;
+            border: 1px solid #eee;
+            border-radius: 8px;
+            background-color: #f1f8ff;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
         }
     </style>
 </head>
 <body>
 <h1>GitHub Test Analyzer</h1>
-
-<!-- Flash and Error Messages -->
-<div class="messages">
-    {% with messages = get_flashed_messages(with_categories=true) %}
-    {% if messages %}
-    <ul>
-        {% for category, message in messages %}
-        <li style="color: {{ 'red' if category == 'error' else 'green' }};">{{ message }}</li>
-        {% endfor %}
-    </ul>
-    {% endif %}
-    {% endwith %}
-
-    {% if error_message %}
-    <p>{{ error_message }}</p>
-    {% endif %}
-</div>
 
 <!-- Form -->
 <form method="POST">
@@ -94,36 +169,44 @@
     </div>
 </div>
 
-<div class="results">
-    <div>
-        <h2>Unit Tests</h2>
-        <div class="test-count">{{ test_results['counts']['unit'] }} test cases</div>
-        <ul>
-            {% for test in test_results['unit_tests'] %}
-            <li>{{ test }}</li>
-            {% endfor %}
-        </ul>
-    </div>
-    <div>
-        <h2>Integration Tests</h2>
-        <div class="test-count">{{ test_results['counts']['integration'] }} test cases</div>
-        <ul>
-            {% for test in test_results['integration_tests'] %}
-            <li>{{ test }}</li>
-            {% endfor %}
-        </ul>
-    </div>
-    <div>
-        <h2>E2E Tests</h2>
-        <div class="test-count">{{ test_results['counts']['e2e'] }} test cases</div>
-        <ul>
-            {% for test in test_results['e2e_tests'] %}
-            <li>{{ test }}</li>
-            {% endfor %}
-        </ul>
-    </div>
-</div>
+<!-- Collapsible Sections for Results -->
+    <div class="results">
+        <!-- Unit Tests -->
+        <div>
+            <button class="collapsible">Unit Tests ({{ test_results['unit_tests']|length }} files)</button>
+            <div class="content">
+                <ul>
+                    {% for test in test_results['unit_tests'] %}
+                    <li>{{ test }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
 
+        <!-- Integration Tests -->
+        <div>
+            <button class="collapsible">Integration Tests ({{ test_results['integration_tests']|length }} files)</button>
+            <div class="content">
+                <ul>
+                    {% for test in test_results['integration_tests'] %}
+                    <li>{{ test }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+
+        <!-- E2E Tests -->
+        <div>
+            <button class="collapsible">E2E Tests ({{ test_results['e2e_tests']|length }} files)</button>
+            <div class="content">
+                <ul>
+                    {% for test in test_results['e2e_tests'] %}
+                    <li>{{ test }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+    </div>
 <!-- Chart Section -->
 <canvas id="testChart"></canvas>
 
@@ -159,8 +242,44 @@
                 }
             }
         }
-    });
+    })
 </script>
-{% endif %}
+   {% endif %}
+
+<!-- Validation Results -->
+    {% if validation_results %}
+    <div class="validation-results">
+        <h2>Validation Results</h2>
+        {% for tech, rules in validation_results.items() %}
+        <h3>{{ tech }}</h3>
+        {% for rule in rules %}
+        <div>
+            <button class="collapsible">{{ rule.message }} ({{ rule.failing_files|length }} failing files)</button>
+            <div class="content">
+                <ul>
+                    {% for file in rule.failing_files %}
+                    <li>{{ file }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+        {% endfor %}
+        {% endfor %}
+    </div>
+    {% endif %}
+<script>
+            // Collapsible functionality
+        document.querySelectorAll('.collapsible').forEach(button => {
+            button.addEventListener('click', () => {
+                button.classList.toggle('active');
+                const content = button.nextElementSibling;
+                if (content.style.maxHeight) {
+                    content.style.maxHeight = null;
+                } else {
+                    content.style.maxHeight = content.scrollHeight + 'px';
+                }
+            });
+        });
+    </script>
 </body>
 </html>
